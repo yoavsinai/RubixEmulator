@@ -46,3 +46,13 @@ Only the state model and rotation engine exist: no move-notation parser (e.g. "R
 ## Preferences
 
 - Tests go in a separate `tests/` integration-test file, not inline `#[cfg(test)]` modules.
+
+## Version control
+
+This project is committed in pieces, not in one large dump — the git history is meant to read as a coherent build path, the way a person would actually develop it.
+
+- **Commit whenever a feature is complete.** As soon as a coherent unit of work lands and builds/tests pass, commit it before starting the next thing — don't batch unrelated work into one commit.
+- **Also commit whenever it's warranted, at your judgment** — e.g. a standalone bug fix, a completed refactor, or any other point where the working tree represents one clean, describable step. Use judgment on granularity: split by *what changed and why*, not by turn boundaries or file count.
+- Each commit should build and pass `cargo test` on its own where practical, so the history stays bisectable.
+- Write commit messages the way the rest of this repo's history does: a short imperative summary line, then a body explaining the *why* (the motivation, the bug, the tradeoff) rather than restating the diff.
+- This standing instruction authorizes committing proactively in this repo specifically — it does not extend to pushing to a remote, which still needs to be confirmed separately.
