@@ -188,6 +188,56 @@ fn scramble_of_zero_moves_leaves_the_cube_solved() {
 }
 
 #[test]
+fn solve_undoes_a_scramble() {
+    let mut rubix = Rubix::solved(Box::new(Cuboid::new(3, 3, 3)));
+    let solved: Vec<_> = rubix.pieces().to_vec();
+
+    // A deterministic "random" source that cycles through several distinct moves and
+    // directions instead of always picking the same one, so the scramble actually
+    // exercises multiple axes/layers before solve() has to unwind them.
+    let mut counter = 0usize;
+    rubix.scramble(15, |bound| {
+        counter = counter.wrapping_add(7);
+        counter % bound
+    });
+    assert_ne!(rubix.pieces().to_vec(), solved, "scramble should have actually moved pieces");
+
+    rubix.solve();
+
+    assert_eq!(rubix.pieces().to_vec(), solved);
+}
+
+#[test]
+fn solve_undoes_manually_applied_moves_in_any_combination() {
+    let mut rubix = Rubix::solved(Box::new(Cuboid::new(3, 3, 3)));
+    let solved: Vec<_> = rubix.pieces().to_vec();
+
+    let moves = rubix.moves();
+    let r = moves.iter().find(|m| m.name == "R").unwrap();
+    let u = moves.iter().find(|m| m.name == "U").unwrap();
+    let f = moves.iter().find(|m| m.name == "F").unwrap();
+
+    rubix.apply(r, true);
+    rubix.apply(u, false);
+    rubix.apply(f, true);
+    rubix.apply(r, false);
+
+    rubix.solve();
+
+    assert_eq!(rubix.pieces().to_vec(), solved);
+}
+
+#[test]
+fn solve_with_no_history_is_a_no_op() {
+    let mut rubix = Rubix::solved(Box::new(Cuboid::new(3, 3, 3)));
+    let before: Vec<_> = rubix.pieces().to_vec();
+
+    rubix.solve();
+
+    assert_eq!(rubix.pieces().to_vec(), before);
+}
+
+#[test]
 fn known_move_produces_expected_face_arrangement() {
     // Rotating the x=0 layer 90 degrees clockwise around +X should cycle
     // that layer's -Y/-Z/+Y/+Z stickers among each other, and leave the
