@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use crossterm::cursor::{Hide, MoveTo, Show};
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
-use crossterm::style::{Color as CtColor, ResetColor, SetBackgroundColor};
+use crossterm::style::{Color as CtColor, ResetColor, SetBackgroundColor, SetForegroundColor};
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, Clear, ClearType, EnterAlternateScreen, LeaveAlternateScreen,
 };
@@ -115,22 +115,50 @@ fn color_to_crossterm(color: Color) -> CtColor {
     }
 }
 
+/// Upper-half-block: setting its foreground to one color and background to another packs
+/// two vertically-stacked pixels into a single character cell, roughly doubling the
+/// renderer's effective vertical resolution.
+const HALF_BLOCK: char = '▀';
+
 fn draw_frame(rubix: &Rubix, camera: &Camera) -> std::io::Result<()> {
     let (cols, rows) = crossterm::terminal::size()?;
+    let content_rows = rows.saturating_sub(1);
+    let subrows = content_rows as usize * 2;
+
     let origin_x = cols as f64 / 2.0;
-    let origin_y = rows as f64 / 2.0;
+    // Sub-cells are roughly square, so the same scale applies to columns and sub-rows.
+    let origin_subrow = subrows as f64 / 2.0;
+    let scale = 6.0_f64.min(cols as f64 / 6.0).min(subrows as f64 / 6.0);
 
     let cube_center_offset = cube_center_offset(rubix);
     let mut quads = projection::build_sticker_quads(rubix.pieces(), camera, cube_center_offset);
     quads.sort_by(|a, b| b.depth.partial_cmp(&a.depth).unwrap_or(std::cmp::Ordering::Equal));
 
-    let scale = 6.0_f64.min(cols as f64 / 6.0).min(rows as f64 / 3.0);
+    let mut framebuffer: Vec<Option<CtColor>> = vec![None; cols as usize * subrows];
+
+    for quad in &quads {
+        fill_quad(&mut framebuffer, quad, origin_x, origin_subrow, scale, cols as usize, subrows);
+    }
 
     let mut out = stdout();
     queue!(out, Clear(ClearType::All))?;
 
-    for quad in &quads {
-        draw_quad(&mut out, quad, origin_x, origin_y, scale, cols, rows)?;
+    for row in 0..content_rows {
+        for col in 0..cols {
+            let top = framebuffer[row as usize * 2 * cols as usize + col as usize];
+            let bottom = framebuffer[(row as usize * 2 + 1) * cols as usize + col as usize];
+            if top.is_none() && bottom.is_none() {
+                continue;
+            }
+
+            queue!(
+                out,
+                MoveTo(col, row),
+                SetForegroundColor(top.unwrap_or(CtColor::Reset)),
+                SetBackgroundColor(bottom.unwrap_or(CtColor::Reset))
+            )?;
+            write!(out, "{HALF_BLOCK}")?;
+        }
     }
 
     queue!(out, MoveTo(0, rows.saturating_sub(1)), ResetColor)?;
@@ -143,48 +171,45 @@ fn draw_frame(rubix: &Rubix, camera: &Camera) -> std::io::Result<()> {
     Ok(())
 }
 
-fn draw_quad(
-    out: &mut impl Write,
+fn fill_quad(
+    framebuffer: &mut [Option<CtColor>],
     quad: &StickerQuad,
     origin_x: f64,
-    origin_y: f64,
+    origin_subrow: f64,
     scale: f64,
-    cols: u16,
-    rows: u16,
-) -> std::io::Result<()> {
+    cols: usize,
+    subrows: usize,
+) {
     let screen_corners: Vec<(f64, f64)> = quad
         .corners
         .iter()
-        .map(|p| (origin_x + p.x * scale, origin_y + p.y * scale))
+        .map(|p| (origin_x + p.x * scale, origin_subrow + p.y * scale))
         .collect();
 
-    let min_x = screen_corners.iter().map(|p| p.0).fold(f64::INFINITY, f64::min).floor().max(0.0) as u16;
+    let min_x = screen_corners.iter().map(|p| p.0).fold(f64::INFINITY, f64::min).floor().max(0.0) as usize;
     let max_x = screen_corners
         .iter()
         .map(|p| p.0)
         .fold(f64::NEG_INFINITY, f64::max)
         .ceil()
-        .min(cols.saturating_sub(1) as f64) as u16;
-    let min_y = screen_corners.iter().map(|p| p.1).fold(f64::INFINITY, f64::min).floor().max(0.0) as u16;
+        .min(cols.saturating_sub(1) as f64) as usize;
+    let min_y = screen_corners.iter().map(|p| p.1).fold(f64::INFINITY, f64::min).floor().max(0.0) as usize;
     let max_y = screen_corners
         .iter()
         .map(|p| p.1)
         .fold(f64::NEG_INFINITY, f64::max)
         .ceil()
-        .min(rows.saturating_sub(1) as f64) as u16;
+        .min(subrows.saturating_sub(1) as f64) as usize;
 
-    queue!(out, SetBackgroundColor(color_to_crossterm(quad.color)))?;
+    let color = color_to_crossterm(quad.color);
 
-    for row in min_y..=max_y {
-        for col in min_x..=max_x {
-            if point_in_polygon((col as f64 + 0.5, row as f64 + 0.5), &screen_corners) {
-                queue!(out, MoveTo(col, row))?;
-                write!(out, " ")?;
+    for sub_y in min_y..=max_y {
+        for x in min_x..=max_x {
+            if point_in_polygon((x as f64 + 0.5, sub_y as f64 + 0.5), &screen_corners) {
+                framebuffer[sub_y * cols + x] = Some(color);
             }
         }
     }
-
-    Ok(())
 }
 
 /// Even-odd ray casting point-in-polygon test over the (convex) sticker quad.

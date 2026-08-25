@@ -18,19 +18,19 @@ pub struct StickerQuad {
     pub depth: f64,
 }
 
-/// Terminal character cells are roughly twice as tall as they are wide, so vertical
-/// screen distances are compressed to keep the projection visually square.
-const CHAR_ASPECT: f64 = 0.5;
-
 const COS_30: f64 = 0.866_025_403_784_438_6;
 const SIN_30: f64 = 0.5;
 
-/// Projects a world-space point into isometric screen space via the camera.
+/// How far each sticker's edge is pulled in from the cubie's true edge, in cubie-widths.
+const STICKER_INSET: f64 = 0.07;
+
+/// Projects a world-space point into isometric screen units (aspect-neutral — the caller
+/// maps these to actual terminal cells/sub-cells and corrects for their aspect ratio).
 pub fn project_point(world: Vec3, camera: &Camera) -> ScreenPoint {
     let view = camera.view_position(world);
     ScreenPoint {
         x: (view.x - view.z) * COS_30 * camera.zoom,
-        y: ((view.x + view.z) * SIN_30 - view.y) * camera.zoom * CHAR_ASPECT,
+        y: ((view.x + view.z) * SIN_30 - view.y) * camera.zoom,
         // Camera looks down -Z in view space, so smaller (more negative) view.z is nearer;
         // depth increases the farther a point is from the camera.
         depth: -view.z,
@@ -84,11 +84,14 @@ pub fn build_sticker_quads(
                 centered_position.z + direction.z * 0.5,
             );
 
+            // Shrink each sticker slightly from the cubie's true edges so a gap shows
+            // between neighboring cubies, reading as a grid line.
+            let half_extent = 0.5 - STICKER_INSET;
             let corner_offsets = [
-                (0.5, 0.5),
-                (0.5, -0.5),
-                (-0.5, -0.5),
-                (-0.5, 0.5),
+                (half_extent, half_extent),
+                (half_extent, -half_extent),
+                (-half_extent, -half_extent),
+                (-half_extent, half_extent),
             ];
             let corners: [ScreenPoint; 4] = std::array::from_fn(|i| {
                 let (su, sv) = corner_offsets[i];
