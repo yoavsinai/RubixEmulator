@@ -32,8 +32,18 @@ pub struct StickerQuad {
 const COS_30: f64 = 0.866_025_403_784_438_6;
 const SIN_30: f64 = 0.5;
 
-/// How far each sticker's edge is pulled in from the cubie's true edge, in cubie-widths.
-const STICKER_INSET: f64 = 0.07;
+/// `Cuboid` places adjacent layers 2 raw units apart (a doubled, centered lattice so the
+/// coordinates stay integers for both even and odd dimensions — see
+/// `cuboid::centered_lattice_coord`). Dividing by this normalizes back to one screen unit
+/// per cubie, so the renderer's visual scale doesn't depend on that engine-internal choice.
+const WORLD_UNITS_PER_CUBIE: f64 = 2.0;
+
+/// Half a cubie's width, in raw world units (matches `WORLD_UNITS_PER_CUBIE`).
+const CUBIE_HALF_WIDTH: f64 = WORLD_UNITS_PER_CUBIE / 2.0;
+
+/// How far each sticker's edge is pulled in from the cubie's true edge, as a fraction of
+/// its half-width.
+const STICKER_INSET_FRACTION: f64 = 0.14;
 
 /// How much farther than its sticker a cubie's body backing sits, so the sticker always
 /// wins the depth test over its own backing where they overlap.
@@ -42,7 +52,12 @@ const BODY_DEPTH_EPSILON: f64 = 1e-4;
 /// Projects a world-space point into isometric screen units (aspect-neutral — the caller
 /// maps these to actual terminal cells/sub-cells and corrects for their aspect ratio).
 pub fn project_point(world: Vec3, camera: &Camera) -> ScreenPoint {
-    let view = camera.view_position(world);
+    let normalized = Vec3::new(
+        world.x / WORLD_UNITS_PER_CUBIE,
+        world.y / WORLD_UNITS_PER_CUBIE,
+        world.z / WORLD_UNITS_PER_CUBIE,
+    );
+    let view = camera.view_position(normalized);
     ScreenPoint {
         x: (view.x - view.z) * COS_30 * camera.zoom,
         y: ((view.x + view.z) * SIN_30 - view.y) * camera.zoom,
@@ -112,9 +127,9 @@ pub fn build_sticker_quads(
             let direction: Vec3 = dir_key.into();
             let (u, v) = perpendicular_axes(direction);
             let center = Vec3::new(
-                centered_position.x + direction.x * 0.5,
-                centered_position.y + direction.y * 0.5,
-                centered_position.z + direction.z * 0.5,
+                centered_position.x + direction.x * CUBIE_HALF_WIDTH,
+                centered_position.y + direction.y * CUBIE_HALF_WIDTH,
+                centered_position.z + direction.z * CUBIE_HALF_WIDTH,
             );
 
             let depth = project_point(center, camera).depth;
@@ -124,7 +139,7 @@ pub fn build_sticker_quads(
             // Every corner (not just the center) is pushed back by the epsilon, so the
             // backing stays farther than its sticker everywhere the two overlap, even
             // once depth is interpolated per-pixel across the tilted face.
-            let mut body_corners = face_corners(center, u, v, 0.5, camera);
+            let mut body_corners = face_corners(center, u, v, CUBIE_HALF_WIDTH, camera);
             for corner in &mut body_corners {
                 corner.depth += BODY_DEPTH_EPSILON;
             }
@@ -136,9 +151,10 @@ pub fn build_sticker_quads(
 
             // Shrunk sticker on top, leaving a thin backing-colored gap between
             // neighboring cubies that reads as a grid line.
+            let sticker_half_extent = CUBIE_HALF_WIDTH * (1.0 - STICKER_INSET_FRACTION);
             quads.push(StickerQuad {
                 kind: QuadKind::Sticker(color),
-                corners: face_corners(center, u, v, 0.5 - STICKER_INSET, camera),
+                corners: face_corners(center, u, v, sticker_half_extent, camera),
                 depth,
             });
         }

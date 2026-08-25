@@ -21,7 +21,11 @@ impl Shape for Cuboid {
         for x in 0..dim_x {
             for y in 0..dim_y {
                 for z in 0..dim_z {
-                    let position = Vec3::new(x as f64, y as f64, z as f64);
+                    let position = Vec3::new(
+                        centered_lattice_coord(x, dim_x),
+                        centered_lattice_coord(y, dim_y),
+                        centered_lattice_coord(z, dim_z),
+                    );
                     let mut piece = Piece::new(position);
 
                     if x == 0 {
@@ -64,18 +68,27 @@ impl Shape for Cuboid {
         ] {
             for layer_index in 0..dim {
                 let name = layer_name(dim, layer_index, pos_letter, neg_letter, mid_letter);
-                let layer_index = layer_index as f64;
+                let layer_coord = centered_lattice_coord(layer_index, dim);
                 moves.push(Move {
                     name,
                     axis,
                     angle_degrees: 90.0,
-                    selector: Box::new(move |piece: &Piece| piece.position.dot(axis) == layer_index),
+                    selector: Box::new(move |piece: &Piece| piece.position.dot(axis) == layer_coord),
                 });
             }
         }
 
         moves
     }
+}
+
+/// Converts a `0..dim` grid index into a lattice coordinate centered on the shape's own
+/// middle, so a layer's rotation axis (which always passes through the world origin —
+/// see `Vec3::rotate_about`) actually passes through that layer's own center too. Scaled
+/// by 2 (spacing of 2 between adjacent layers) so the result is always an integer, even
+/// for even dimensions where the true center falls on a half-integer.
+fn centered_lattice_coord(index: usize, dim: usize) -> f64 {
+    2.0 * index as f64 - (dim - 1) as f64
 }
 
 /// Standard WCA/TNoodle-style NxN single-layer notation: `R`/`2R`/`3R`/...

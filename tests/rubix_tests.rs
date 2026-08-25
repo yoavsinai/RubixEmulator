@@ -130,6 +130,37 @@ fn move_only_touches_its_own_layer() {
 }
 
 #[test]
+fn turned_layer_pieces_stay_within_the_shapes_own_coordinate_bounds() {
+    // Regression test: a layer's rotation axis must pass through that layer's own center,
+    // not just through the world origin. A cuboid whose grid isn't centered on the origin
+    // (e.g. a corner-origin layout) would rotate pieces around the wrong point, swinging
+    // them onto coordinates outside the shape entirely.
+    let cuboid = Cuboid::new(3, 3, 3);
+    let mut valid_coords: Vec<f64> = cuboid
+        .solved_pieces()
+        .iter()
+        .flat_map(|p| [p.position.x, p.position.y, p.position.z])
+        .collect();
+    valid_coords.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+    valid_coords.sort_by(|a, b| a.partial_cmp(b).unwrap());
+    valid_coords.dedup_by(|a, b| (*a - *b).abs() < 1e-9);
+
+    let mut rubix = Rubix::solved(Box::new(cuboid));
+    for m in rubix.moves() {
+        rubix.apply(&m, true);
+    }
+
+    for piece in rubix.pieces() {
+        for coord in [piece.position.x, piece.position.y, piece.position.z] {
+            assert!(
+                valid_coords.iter().any(|&v| (v - coord).abs() < 1e-9),
+                "piece landed on out-of-bounds coordinate {coord} after a turn (valid: {valid_coords:?})"
+            );
+        }
+    }
+}
+
+#[test]
 fn known_move_produces_expected_face_arrangement() {
     // Rotating the x=0 layer 90 degrees clockwise around +X should cycle
     // that layer's -Y/-Z/+Y/+Z stickers among each other, and leave the
