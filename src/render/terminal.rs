@@ -1,5 +1,5 @@
 use std::io::{stdout, Write};
-use std::time::Duration;
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use crossterm::cursor::{Hide, MoveTo, Show};
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
@@ -18,6 +18,31 @@ use crate::vec3::Vec3;
 
 const ORBIT_STEP_DEGREES: f64 = 5.0;
 const ZOOM_STEP_FACTOR: f64 = 1.15;
+const SCRAMBLE_MOVE_COUNT: usize = 25;
+
+/// A small, dependency-free xorshift64* generator — scrambling is the only place this
+/// renderer needs randomness, so it isn't worth pulling in a whole RNG crate for it.
+struct Rng(u64);
+
+impl Rng {
+    fn new() -> Self {
+        let seed = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map(|d| d.as_nanos() as u64)
+            .unwrap_or(0x9E37_79B9_7F4A_7C15);
+        Rng(seed | 1) // xorshift needs a nonzero state
+    }
+
+    /// A pseudo-random value in `0..bound`.
+    fn next(&mut self, bound: usize) -> usize {
+        let mut x = self.0;
+        x ^= x << 13;
+        x ^= x >> 7;
+        x ^= x << 17;
+        self.0 = x;
+        (x.wrapping_mul(0x2545_F491_4F6C_DD1D) % bound as u64) as usize
+    }
+}
 
 /// Enables raw mode + the alternate screen + hides the cursor on construction, and always
 /// restores all three on drop (including on panic), so the caller's terminal is never left
@@ -44,6 +69,7 @@ impl Drop for RawModeGuard {
 enum Action {
     Quit,
     ApplyMove(usize, bool),
+    Scramble,
     None,
 }
 
@@ -52,6 +78,7 @@ enum Action {
 pub fn run_interactive(mut rubix: Rubix) -> std::io::Result<()> {
     let _guard = RawModeGuard::new()?;
     let mut camera = Camera::new();
+    let mut rng = Rng::new();
     let moves = rubix.moves();
 
     loop {
@@ -62,6 +89,7 @@ pub fn run_interactive(mut rubix: Rubix) -> std::io::Result<()> {
                 match handle_key(key, &mut camera, &moves) {
                     Action::Quit => break,
                     Action::ApplyMove(idx, clockwise) => rubix.apply(&moves[idx], clockwise),
+                    Action::Scramble => rubix.scramble(SCRAMBLE_MOVE_COUNT, |bound| rng.next(bound)),
                     Action::None => {}
                 }
             }
@@ -74,6 +102,7 @@ pub fn run_interactive(mut rubix: Rubix) -> std::io::Result<()> {
 fn handle_key(key: KeyEvent, camera: &mut Camera, moves: &[Move]) -> Action {
     match key.code {
         KeyCode::Char('q') | KeyCode::Esc => Action::Quit,
+        KeyCode::Char(' ') => Action::Scramble,
         KeyCode::Left => {
             camera.orbit(-ORBIT_STEP_DEGREES, 0.0);
             Action::None
@@ -193,7 +222,7 @@ fn draw_frame(rubix: &Rubix, camera: &Camera) -> std::io::Result<()> {
     queue!(out, MoveTo(0, rows.saturating_sub(1)), ResetColor)?;
     write!(
         out,
-        "arrows: rotate camera  +/-: zoom  letters: turn faces (shift = ccw)  q: quit"
+        "arrows: rotate camera  +/-: zoom  letters: turn faces (shift = ccw)  space: scramble  q: quit"
     )?;
     out.flush()?;
 
