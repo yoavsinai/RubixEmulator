@@ -55,6 +55,19 @@ impl Rubix {
         self.rotate(|piece| selector(piece), m.axis, angle);
     }
 
+    /// Applies `move_count` random legal moves. Takes a `random` closure — given an
+    /// exclusive upper bound, it returns a value in `0..bound` — rather than reaching for
+    /// a random number generator itself, so the engine stays dependency-free and this is
+    /// deterministically testable; callers that need real randomness supply their own RNG.
+    pub fn scramble(&mut self, move_count: usize, mut random: impl FnMut(usize) -> usize) {
+        let moves = self.moves();
+        for _ in 0..move_count {
+            let m = &moves[random(moves.len())];
+            let clockwise = random(2) == 0;
+            self.apply(m, clockwise);
+        }
+    }
+
     /// Derived view: every (position, color) currently showing on the given face.
     pub fn face(&self, direction: Vec3) -> Vec<(Vec3, Color)> {
         let key = LatticeKey::from(direction);

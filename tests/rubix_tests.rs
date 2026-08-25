@@ -161,6 +161,33 @@ fn turned_layer_pieces_stay_within_the_shapes_own_coordinate_bounds() {
 }
 
 #[test]
+fn scramble_applies_the_requested_number_of_moves() {
+    let mut rubix = Rubix::solved(Box::new(Cuboid::new(3, 3, 3)));
+    let mut reference = Rubix::solved(Box::new(Cuboid::new(3, 3, 3)));
+
+    // A fixed "random" source that always picks move 0, clockwise -- deterministic, so the
+    // result can be checked against applying that exact same move directly.
+    rubix.scramble(5, |_bound| 0);
+
+    let moves = reference.moves();
+    for _ in 0..5 {
+        reference.apply(&moves[0], true);
+    }
+
+    assert_eq!(rubix.pieces().to_vec(), reference.pieces().to_vec());
+}
+
+#[test]
+fn scramble_of_zero_moves_leaves_the_cube_solved() {
+    let mut rubix = Rubix::solved(Box::new(Cuboid::new(3, 3, 3)));
+    let before: Vec<_> = rubix.pieces().to_vec();
+
+    rubix.scramble(0, |_bound| 0);
+
+    assert_eq!(rubix.pieces().to_vec(), before);
+}
+
+#[test]
 fn known_move_produces_expected_face_arrangement() {
     // Rotating the x=0 layer 90 degrees clockwise around +X should cycle
     // that layer's -Y/-Z/+Y/+Z stickers among each other, and leave the
