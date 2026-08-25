@@ -11,7 +11,7 @@ use crossterm::{queue, ExecutableCommand};
 
 use crate::piece::Color;
 use crate::render::camera::Camera;
-use crate::render::projection::{self, StickerQuad};
+use crate::render::projection::{self, QuadKind, StickerQuad};
 use crate::rubix::Rubix;
 use crate::shape::Move;
 use crate::vec3::Vec3;
@@ -124,6 +124,17 @@ fn color_to_crossterm(color: Color) -> CtColor {
     }
 }
 
+/// The cube's plastic body, shown in the thin gaps between inset stickers and anywhere
+/// else a piece's solid face is nearer to the camera than any sticker.
+const BODY_COLOR: CtColor = CtColor::Rgb { r: 25, g: 25, b: 25 };
+
+fn quad_kind_to_crossterm(kind: QuadKind) -> CtColor {
+    match kind {
+        QuadKind::Sticker(color) => color_to_crossterm(color),
+        QuadKind::Body => BODY_COLOR,
+    }
+}
+
 /// Upper-half-block: setting its foreground to one color and background to another packs
 /// two vertically-stacked pixels into a single character cell, roughly doubling the
 /// renderer's effective vertical resolution.
@@ -140,13 +151,22 @@ fn draw_frame(rubix: &Rubix, camera: &Camera) -> std::io::Result<()> {
     let scale = 6.0_f64.min(cols as f64 / 6.0).min(subrows as f64 / 6.0);
 
     let cube_center_offset = cube_center_offset(rubix);
-    let mut quads = projection::build_sticker_quads(rubix.pieces(), camera, cube_center_offset);
-    quads.sort_by(|a, b| b.depth.partial_cmp(&a.depth).unwrap_or(std::cmp::Ordering::Equal));
+    let quads = projection::build_sticker_quads(rubix.pieces(), camera, cube_center_offset);
 
     let mut framebuffer: Vec<Option<CtColor>> = vec![None; cols as usize * subrows];
+    let mut depth_buffer: Vec<f64> = vec![f64::INFINITY; cols as usize * subrows];
 
     for quad in &quads {
-        fill_quad(&mut framebuffer, quad, origin_x, origin_subrow, scale, cols as usize, subrows);
+        fill_quad(
+            &mut framebuffer,
+            &mut depth_buffer,
+            quad,
+            origin_x,
+            origin_subrow,
+            scale,
+            cols as usize,
+            subrows,
+        );
     }
 
     let mut out = stdout();
@@ -180,8 +200,13 @@ fn draw_frame(rubix: &Rubix, camera: &Camera) -> std::io::Result<()> {
     Ok(())
 }
 
+/// Rasterizes `quad` into the framebuffer, only writing a cell when `quad`'s depth beats
+/// whatever is already there. This is a true per-pixel z-buffer test, not draw-order — so
+/// occlusion between every piece's faces (sticker or body, facing the camera or not) is
+/// always correct, and nothing hidden behind nearer geometry can ever show through.
 fn fill_quad(
     framebuffer: &mut [Option<CtColor>],
+    depth_buffer: &mut [f64],
     quad: &StickerQuad,
     origin_x: f64,
     origin_subrow: f64,
@@ -210,12 +235,16 @@ fn fill_quad(
         .ceil()
         .min(subrows.saturating_sub(1) as f64) as usize;
 
-    let color = color_to_crossterm(quad.color);
+    let color = quad_kind_to_crossterm(quad.kind);
 
     for sub_y in min_y..=max_y {
         for x in min_x..=max_x {
-            if point_in_polygon((x as f64 + 0.5, sub_y as f64 + 0.5), &screen_corners) {
-                framebuffer[sub_y * cols + x] = Some(color);
+            let cell = sub_y * cols + x;
+            if quad.depth < depth_buffer[cell]
+                && point_in_polygon((x as f64 + 0.5, sub_y as f64 + 0.5), &screen_corners)
+            {
+                depth_buffer[cell] = quad.depth;
+                framebuffer[cell] = Some(color);
             }
         }
     }

@@ -1,5 +1,5 @@
 use rubixemulator::piece::Piece;
-use rubixemulator::render::projection::{build_sticker_quads, is_facing_camera, project_point};
+use rubixemulator::render::projection::{build_sticker_quads, is_facing_camera, project_point, QuadKind};
 use rubixemulator::render::Camera;
 use rubixemulator::rubix::Rubix;
 use rubixemulator::shapes::cuboid::Cuboid;
@@ -111,7 +111,7 @@ fn zoom_by_scales_projection_and_clamps() {
 }
 
 #[test]
-fn build_sticker_quads_culls_backfaces_on_single_cubie() {
+fn build_sticker_quads_emits_every_side_not_just_camera_facing_ones() {
     let piece = Piece::new(Vec3::new(0.0, 0.0, 0.0))
         .with_sticker(direction::POS_X, rubixemulator::piece::Color::Red)
         .with_sticker(direction::NEG_X, rubixemulator::piece::Color::Orange)
@@ -123,17 +123,43 @@ fn build_sticker_quads_culls_backfaces_on_single_cubie() {
     let camera = Camera::new();
     let quads = build_sticker_quads(&[piece], &camera, Vec3::new(0.0, 0.0, 0.0));
 
-    // The default isometric camera sees exactly the 3 stickers on its positive-facing sides.
-    assert_eq!(quads.len(), 3);
+    // Every one of the 6 stickers gets a quad (no directional culling), each paired with
+    // an opaque body backing: 6 stickers + 6 bodies = 12.
+    let sticker_count = quads.iter().filter(|q| matches!(q.kind, QuadKind::Sticker(_))).count();
+    let body_count = quads.iter().filter(|q| matches!(q.kind, QuadKind::Body)).count();
+    assert_eq!(sticker_count, 6);
+    assert_eq!(body_count, 6);
 }
 
 #[test]
-fn build_sticker_quads_on_solved_cuboid_only_shows_visible_stickers() {
+fn build_sticker_quads_on_solved_cuboid_covers_every_sticker() {
     let rubix = Rubix::solved(Box::new(Cuboid::new(2, 2, 2)));
     let camera = Camera::new();
 
     let quads = build_sticker_quads(rubix.pieces(), &camera, Vec3::new(0.5, 0.5, 0.5));
 
-    // A 2x2x2 has 4 stickers per face, 3 faces visible from the default isometric angle.
-    assert_eq!(quads.len(), 12);
+    // A 2x2x2 has 4 stickers per face across all 6 faces = 24 stickers total, each with
+    // a paired body quad, regardless of which side the default camera happens to face.
+    let sticker_count = quads.iter().filter(|q| matches!(q.kind, QuadKind::Sticker(_))).count();
+    let body_count = quads.iter().filter(|q| matches!(q.kind, QuadKind::Body)).count();
+    assert_eq!(sticker_count, 24);
+    assert_eq!(body_count, 24);
+}
+
+#[test]
+fn body_backing_is_always_slightly_farther_than_its_own_sticker() {
+    let piece = Piece::new(Vec3::new(0.0, 0.0, 0.0))
+        .with_sticker(direction::POS_X, rubixemulator::piece::Color::Red);
+
+    let camera = Camera::new();
+    let quads = build_sticker_quads(&[piece], &camera, Vec3::new(0.0, 0.0, 0.0));
+
+    let sticker_depth = quads
+        .iter()
+        .find(|q| matches!(q.kind, QuadKind::Sticker(_)))
+        .unwrap()
+        .depth;
+    let body_depth = quads.iter().find(|q| matches!(q.kind, QuadKind::Body)).unwrap().depth;
+
+    assert!(body_depth > sticker_depth);
 }
