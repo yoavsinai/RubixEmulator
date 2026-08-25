@@ -20,6 +20,7 @@ This opens an interactive isometric view of a solved 3×3×3 cube.
 | `+` / `-` | Zoom in / out |
 | A letter (`r`, `u`, `f`, `l`, `d`, `b`, ...) | Turn the matching face clockwise |
 | Shift + letter | Turn the matching face counterclockwise |
+| Space | Scramble (25 random moves) |
 | `q` / `Esc` | Quit |
 
 Face letters follow standard cube notation (`R`/`L`, `U`/`D`, `F`/`B`), with wide-move numbering and `M`/`E`/`S` slice names where they apply — see [Architecture](#architecture) below.
