@@ -70,6 +70,7 @@ enum Action {
     Quit,
     ApplyMove(usize, bool),
     Scramble,
+    Solve,
     None,
 }
 
@@ -90,6 +91,7 @@ pub fn run_interactive(mut rubix: Rubix) -> std::io::Result<()> {
                     Action::Quit => break,
                     Action::ApplyMove(idx, clockwise) => rubix.apply(&moves[idx], clockwise),
                     Action::Scramble => rubix.scramble(SCRAMBLE_MOVE_COUNT, |bound| rng.next(bound)),
+                    Action::Solve => rubix.solve(),
                     Action::None => {}
                 }
             }
@@ -103,6 +105,7 @@ fn handle_key(key: KeyEvent, camera: &mut Camera, moves: &[Move]) -> Action {
     match key.code {
         KeyCode::Char('q') | KeyCode::Esc => Action::Quit,
         KeyCode::Char(' ') => Action::Scramble,
+        KeyCode::Enter => Action::Solve,
         KeyCode::Left => {
             camera.orbit(-ORBIT_STEP_DEGREES, 0.0);
             Action::None
@@ -222,7 +225,7 @@ fn draw_frame(rubix: &Rubix, camera: &Camera) -> std::io::Result<()> {
     queue!(out, MoveTo(0, rows.saturating_sub(1)), ResetColor)?;
     write!(
         out,
-        "arrows: rotate camera  +/-: zoom  letters: turn faces (shift = ccw)  space: scramble  q: quit"
+        "arrows: rotate camera  +/-: zoom  letters: turn faces (shift = ccw)  space: scramble  enter: solve  q: quit"
     )?;
     out.flush()?;
 
