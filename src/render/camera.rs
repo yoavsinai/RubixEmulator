@@ -2,6 +2,8 @@ use crate::vec3::{direction, Vec3};
 
 const MAX_ELEVATION_DEGREES: f64 = 89.0;
 const MIN_ELEVATION_DEGREES: f64 = -89.0;
+const MIN_ZOOM: f64 = 0.3;
+const MAX_ZOOM: f64 = 4.0;
 
 /// An orbiting camera: rotates around the puzzle at a fixed distance, looking at the origin.
 pub struct Camera {
@@ -24,6 +26,12 @@ impl Camera {
         self.azimuth_degrees += delta_azimuth;
         self.elevation_degrees = (self.elevation_degrees + delta_elevation)
             .clamp(MIN_ELEVATION_DEGREES, MAX_ELEVATION_DEGREES);
+    }
+
+    /// Multiplies the zoom level by `factor` (>1 zooms in, <1 zooms out), clamped to a
+    /// sane range so the cube can't shrink to nothing or blow up off-screen.
+    pub fn zoom_by(&mut self, factor: f64) {
+        self.zoom = (self.zoom * factor).clamp(MIN_ZOOM, MAX_ZOOM);
     }
 
     /// Rotates a world-space point into camera space: camera looks down -Z afterward.

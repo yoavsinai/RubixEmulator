@@ -17,6 +17,7 @@ use crate::shape::Move;
 use crate::vec3::Vec3;
 
 const ORBIT_STEP_DEGREES: f64 = 5.0;
+const ZOOM_STEP_FACTOR: f64 = 1.15;
 
 /// Enables raw mode + the alternate screen + hides the cursor on construction, and always
 /// restores all three on drop (including on panic), so the caller's terminal is never left
@@ -87,6 +88,14 @@ fn handle_key(key: KeyEvent, camera: &mut Camera, moves: &[Move]) -> Action {
         }
         KeyCode::Down => {
             camera.orbit(0.0, -ORBIT_STEP_DEGREES);
+            Action::None
+        }
+        KeyCode::Char('+') | KeyCode::Char('=') => {
+            camera.zoom_by(ZOOM_STEP_FACTOR);
+            Action::None
+        }
+        KeyCode::Char('-') | KeyCode::Char('_') => {
+            camera.zoom_by(1.0 / ZOOM_STEP_FACTOR);
             Action::None
         }
         KeyCode::Char(c) => key_to_move(c, moves)
@@ -164,7 +173,7 @@ fn draw_frame(rubix: &Rubix, camera: &Camera) -> std::io::Result<()> {
     queue!(out, MoveTo(0, rows.saturating_sub(1)), ResetColor)?;
     write!(
         out,
-        "arrows: rotate camera  letters: turn faces (shift = ccw)  q: quit"
+        "arrows: rotate camera  +/-: zoom  letters: turn faces (shift = ccw)  q: quit"
     )?;
     out.flush()?;
 
