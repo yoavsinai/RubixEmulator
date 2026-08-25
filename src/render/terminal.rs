@@ -200,10 +200,14 @@ fn draw_frame(rubix: &Rubix, camera: &Camera) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Rasterizes `quad` into the framebuffer, only writing a cell when `quad`'s depth beats
-/// whatever is already there. This is a true per-pixel z-buffer test, not draw-order — so
-/// occlusion between every piece's faces (sticker or body, facing the camera or not) is
-/// always correct, and nothing hidden behind nearer geometry can ever show through.
+/// Rasterizes `quad` into the framebuffer, only writing a cell when its depth beats
+/// whatever is already there. Depth is interpolated exactly across the quad rather than
+/// using one flat value per face: a sticker viewed at an angle is tilted, so its true
+/// depth varies from corner to corner, and treating the whole face as one depth caused
+/// neighboring cubies to occlude each other incorrectly (visible as a sheared, jumbled
+/// cube when rotating). Since the projection is orthographic and each quad is a planar
+/// parallelogram, both screen position and depth are exact affine functions of its two
+/// local axes, so a single 2x2 solve recovers correct containment and depth together.
 fn fill_quad(
     framebuffer: &mut [Option<CtColor>],
     depth_buffer: &mut [f64],
@@ -214,23 +218,35 @@ fn fill_quad(
     cols: usize,
     subrows: usize,
 ) {
-    let screen_corners: Vec<(f64, f64)> = quad
-        .corners
-        .iter()
-        .map(|p| (origin_x + p.x * scale, origin_subrow + p.y * scale))
-        .collect();
+    // corners[0..4] are laid out (+h,+h), (+h,-h), (-h,-h), (-h,+h) in the quad's local
+    // axes, so corners[1]-corners[2] and corners[3]-corners[2] are its two edge vectors.
+    let screen: [(f64, f64, f64); 4] = std::array::from_fn(|i| {
+        let p = quad.corners[i];
+        (origin_x + p.x * scale, origin_subrow + p.y * scale, p.depth)
+    });
 
-    let min_x = screen_corners.iter().map(|p| p.0).fold(f64::INFINITY, f64::min).floor().max(0.0) as usize;
-    let max_x = screen_corners
+    let origin = screen[2];
+    let edge_u = (screen[1].0 - origin.0, screen[1].1 - origin.1, screen[1].2 - origin.2);
+    let edge_v = (screen[3].0 - origin.0, screen[3].1 - origin.1, screen[3].2 - origin.2);
+
+    let det = edge_u.0 * edge_v.1 - edge_v.0 * edge_u.1;
+    if det.abs() < 1e-12 {
+        return; // Degenerate: the quad is exactly edge-on to the camera, no area to draw.
+    }
+
+    let xs = [screen[0].0, screen[1].0, screen[2].0, screen[3].0];
+    let ys = [screen[0].1, screen[1].1, screen[2].1, screen[3].1];
+    let min_x = xs.iter().cloned().fold(f64::INFINITY, f64::min).floor().max(0.0) as usize;
+    let max_x = xs
         .iter()
-        .map(|p| p.0)
+        .cloned()
         .fold(f64::NEG_INFINITY, f64::max)
         .ceil()
         .min(cols.saturating_sub(1) as f64) as usize;
-    let min_y = screen_corners.iter().map(|p| p.1).fold(f64::INFINITY, f64::min).floor().max(0.0) as usize;
-    let max_y = screen_corners
+    let min_y = ys.iter().cloned().fold(f64::INFINITY, f64::min).floor().max(0.0) as usize;
+    let max_y = ys
         .iter()
-        .map(|p| p.1)
+        .cloned()
         .fold(f64::NEG_INFINITY, f64::max)
         .ceil()
         .min(subrows.saturating_sub(1) as f64) as usize;
@@ -239,37 +255,24 @@ fn fill_quad(
 
     for sub_y in min_y..=max_y {
         for x in min_x..=max_x {
+            let px = x as f64 + 0.5 - origin.0;
+            let py = sub_y as f64 + 0.5 - origin.1;
+
+            // Solve px = a*edge_u.x + b*edge_v.x, py = a*edge_u.y + b*edge_v.y for (a, b).
+            let a = (px * edge_v.1 - edge_v.0 * py) / det;
+            let b = (edge_u.0 * py - px * edge_u.1) / det;
+            if !(0.0..=1.0).contains(&a) || !(0.0..=1.0).contains(&b) {
+                continue;
+            }
+
+            let depth = origin.2 + a * edge_u.2 + b * edge_v.2;
             let cell = sub_y * cols + x;
-            if quad.depth < depth_buffer[cell]
-                && point_in_polygon((x as f64 + 0.5, sub_y as f64 + 0.5), &screen_corners)
-            {
-                depth_buffer[cell] = quad.depth;
+            if depth < depth_buffer[cell] {
+                depth_buffer[cell] = depth;
                 framebuffer[cell] = Some(color);
             }
         }
     }
-}
-
-/// Even-odd ray casting point-in-polygon test over the (convex) sticker quad.
-fn point_in_polygon(point: (f64, f64), polygon: &[(f64, f64)]) -> bool {
-    let (px, py) = point;
-    let mut inside = false;
-    let n = polygon.len();
-
-    for i in 0..n {
-        let (x1, y1) = polygon[i];
-        let (x2, y2) = polygon[(i + 1) % n];
-
-        let crosses = (y1 > py) != (y2 > py);
-        if crosses {
-            let x_intersect = x1 + (py - y1) / (y2 - y1) * (x2 - x1);
-            if px < x_intersect {
-                inside = !inside;
-            }
-        }
-    }
-
-    inside
 }
 
 fn cube_center_offset(rubix: &Rubix) -> Vec3 {

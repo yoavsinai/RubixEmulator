@@ -121,9 +121,16 @@ pub fn build_sticker_quads(
 
             // Full-size opaque backing first, so a gap in the inset sticker still shows
             // solid cube plastic rather than whatever geometry happens to lie behind it.
+            // Every corner (not just the center) is pushed back by the epsilon, so the
+            // backing stays farther than its sticker everywhere the two overlap, even
+            // once depth is interpolated per-pixel across the tilted face.
+            let mut body_corners = face_corners(center, u, v, 0.5, camera);
+            for corner in &mut body_corners {
+                corner.depth += BODY_DEPTH_EPSILON;
+            }
             quads.push(StickerQuad {
                 kind: QuadKind::Body,
-                corners: face_corners(center, u, v, 0.5, camera),
+                corners: body_corners,
                 depth: depth + BODY_DEPTH_EPSILON,
             });
 
