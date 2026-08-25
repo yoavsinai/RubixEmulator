@@ -1,0 +1,62 @@
+{
+    // Requires the CodeLLDB extension (vadimcn.vscode-lldb).
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug RubixEmulator",
+            "cargo": {
+                "args": [
+                    "build",
+                    "--bin=RubixEmulator",
+                    "--package=RubixEmulator"
+                ],
+                "filter": {
+                    "name": "RubixEmulator",
+                    "kind": "bin"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug engine tests (rubix_tests)",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=rubix_tests",
+                    "--package=RubixEmulator"
+                ],
+                "filter": {
+                    "name": "rubix_tests",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        },
+        {
+            "type": "lldb",
+            "request": "launch",
+            "name": "Debug renderer tests (render_projection_tests)",
+            "cargo": {
+                "args": [
+                    "test",
+                    "--no-run",
+                    "--test=render_projection_tests",
+                    "--package=RubixEmulator"
+                ],
+                "filter": {
+                    "name": "render_projection_tests",
+                    "kind": "test"
+                }
+            },
+            "args": [],
+            "cwd": "${workspaceFolder}"
+        }
+    ]
+}
