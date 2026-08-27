@@ -1,5 +1,5 @@
 use std::io::{stdout, Write};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use crossterm::cursor::{Hide, MoveTo, Show};
 use crossterm::event::{self, Event, KeyCode, KeyEvent};
@@ -11,6 +11,7 @@ use crossterm::{queue, ExecutableCommand};
 
 use crate::piece::Color;
 use crate::render::camera::Camera;
+use crate::render::rng::Rng;
 use crate::render::projection::{self, QuadKind, StickerQuad};
 use crate::rubix::Rubix;
 use crate::shape::Move;
@@ -19,30 +20,6 @@ use crate::vec3::Vec3;
 const ORBIT_STEP_DEGREES: f64 = 5.0;
 const ZOOM_STEP_FACTOR: f64 = 1.15;
 const SCRAMBLE_MOVE_COUNT: usize = 25;
-
-/// A small, dependency-free xorshift64* generator — scrambling is the only place this
-/// renderer needs randomness, so it isn't worth pulling in a whole RNG crate for it.
-struct Rng(u64);
-
-impl Rng {
-    fn new() -> Self {
-        let seed = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .map(|d| d.as_nanos() as u64)
-            .unwrap_or(0x9E37_79B9_7F4A_7C15);
-        Rng(seed | 1) // xorshift needs a nonzero state
-    }
-
-    /// A pseudo-random value in `0..bound`.
-    fn next(&mut self, bound: usize) -> usize {
-        let mut x = self.0;
-        x ^= x << 13;
-        x ^= x >> 7;
-        x ^= x << 17;
-        self.0 = x;
-        (x.wrapping_mul(0x2545_F491_4F6C_DD1D) % bound as u64) as usize
-    }
-}
 
 /// Enables raw mode + the alternate screen + hides the cursor on construction, and always
 /// restores all three on drop (including on panic), so the caller's terminal is never left
