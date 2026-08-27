@@ -100,13 +100,16 @@ fn run_loop(rubix: &mut Rubix) -> std::io::Result<()> {
     let mut camera = Camera::new();
     let mut rng = Rng::new();
     let moves = rubix.moves();
+    // A digit key starts a depth prefix ("2", "3", ...); the next letter completes it
+    // into a wide-move name like "2R". Cleared after the letter, or by any non-letter key.
+    let mut pending_depth: Option<char> = None;
 
     loop {
         draw_frame(rubix, &camera)?;
 
         if event::poll(Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {
-                match handle_key(key, &mut camera, &moves) {
+                match handle_key(key, &mut camera, &moves, &mut pending_depth) {
                     Action::Quit => break,
                     Action::ApplyMove(idx, clockwise) => rubix.apply(&moves[idx], clockwise),
                     Action::Scramble => rubix.scramble(SCRAMBLE_MOVE_COUNT, |bound| rng.next(bound)),
@@ -120,8 +123,30 @@ fn run_loop(rubix: &mut Rubix) -> std::io::Result<()> {
     Ok(())
 }
 
-fn handle_key(key: KeyEvent, camera: &mut Camera, moves: &[Move]) -> Action {
+fn handle_key(
+    key: KeyEvent,
+    camera: &mut Camera,
+    moves: &[Move],
+    pending_depth: &mut Option<char>,
+) -> Action {
+    // Complete or abandon a pending depth prefix before anything else.
+    let prefix = pending_depth.take();
+    if let Some(depth) = prefix {
+        if let KeyCode::Char(c) = key.code {
+            if c.is_ascii_alphabetic() {
+                return key_to_move(&format!("{depth}{}", c.to_ascii_uppercase()), c.is_lowercase(), moves) // lowercase = clockwise
+                    .map(|(idx, cw)| Action::ApplyMove(idx, cw))
+                    .unwrap_or(Action::None);
+            }
+        }
+        // Not a letter: the prefix is dropped and the key falls through as normal.
+    }
+
     match key.code {
+        KeyCode::Char(c @ '2'..='9') => {
+            *pending_depth = Some(c);
+            Action::None
+        }
         KeyCode::Char('q') | KeyCode::Esc => Action::Quit,
         KeyCode::Char(' ') => Action::Scramble,
         KeyCode::Enter => Action::Solve,
@@ -149,19 +174,18 @@ fn handle_key(key: KeyEvent, camera: &mut Camera, moves: &[Move]) -> Action {
             camera.zoom_by(1.0 / ZOOM_STEP_FACTOR);
             Action::None
         }
-        KeyCode::Char(c) => key_to_move(c, moves)
+        KeyCode::Char(c) => key_to_move(&c.to_ascii_uppercase().to_string(), c.is_lowercase(), moves) // lowercase = clockwise
             .map(|(idx, clockwise)| Action::ApplyMove(idx, clockwise))
             .unwrap_or(Action::None),
         _ => Action::None,
     }
 }
 
-fn key_to_move(c: char, moves: &[Move]) -> Option<(usize, bool)> {
-    let target = c.to_ascii_uppercase().to_string();
+fn key_to_move(name: &str, clockwise: bool, moves: &[Move]) -> Option<(usize, bool)> {
     moves
         .iter()
-        .position(|m| m.name == target)
-        .map(|idx| (idx, c.is_lowercase()))
+        .position(|m| m.name == name)
+        .map(|idx| (idx, clockwise))
 }
 
 fn color_to_crossterm(color: Color) -> CtColor {
@@ -244,7 +268,7 @@ fn draw_frame(rubix: &Rubix, camera: &Camera) -> std::io::Result<()> {
     queue!(out, MoveTo(0, rows.saturating_sub(1)), ResetColor)?;
     write!(
         out,
-        "arrows: rotate camera  +/-: zoom  letters: turn faces (shift = ccw)  space: scramble  enter: solve  q: quit"
+        "arrows: rotate camera  +/-: zoom  letters: turn faces (shift = ccw)  digit then letter: inner slice (e.g. 2 R)  space: scramble  enter: solve  q: quit"
     )?;
     out.flush()?;
 

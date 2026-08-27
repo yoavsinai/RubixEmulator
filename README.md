@@ -20,6 +20,7 @@ This opens an interactive isometric view of a solved 3×3×3 cube.
 | `+` / `-` | Zoom in / out |
 | A letter (`r`, `u`, `f`, `l`, `d`, `b`, ...) | Turn the matching face clockwise |
 | Shift + letter | Turn the matching face counterclockwise |
+| A digit (`2`–`9`) then a letter | Turn an inner slice that many layers in, e.g. `2` then `r` for `2R` (Shift on the letter for counterclockwise) |
 | Space | Scramble (25 random moves) |
 | Enter | Solve (undo everything back to solved) |
 | `q` / `Esc` | Quit |
