@@ -10,7 +10,23 @@ It ships with an interactive 3D renderer that runs right in your terminal.
 cargo run
 ```
 
-This opens an interactive isometric view of a solved 3×3×3 cube.
+This first shows a small setup screen for choosing the puzzle's size — the three
+axes (X, Y, Z) are set independently, so `3 × 3 × 5` is as valid as `3 × 3 × 3`.
+
+**Setup screen:**
+
+| Key | Action |
+| --- | --- |
+| Up / Down | Pick which axis to change |
+| Left / Right, or a digit `1`–`9` | Change the selected axis (1–10 pieces) |
+| Enter | Start the puzzle at that size |
+| `q` / `Esc` | Quit |
+
+It then opens an interactive isometric view of the solved puzzle.
+
+> **Note:** the renderer is an interactive terminal program — run it from a real
+> terminal (the integrated terminal, or the "Debug RubixEmulator" launch config).
+> VS Code's build/run *task* output panel isn't a TTY, so keystrokes won't reach it.
 
 **Controls:**
 
@@ -56,6 +72,7 @@ Each `Cuboid` layer's own rotation axis must pass through that layer's own cente
 **The terminal renderer is a pure consumer of the engine**, kept out of `Rubix`/`Shape`/`Piece` entirely. `src/render/` reads `Rubix::pieces()`/`Rubix::moves()`/`Rubix::apply()` and nothing else:
 - `camera.rs` — a simple orbiting camera (azimuth/elevation/zoom), reusing `Vec3::rotate_about`.
 - `projection.rs` — isometric 3D→2D projection. Every sticker face (all 6 sides of every piece, always) gets projected, plus a full-size opaque "plastic body" backing behind it, so gaps between inset stickers never show through to hidden geometry.
+- `setup.rs` — the pre-launch size picker; runs under the same raw-mode guard as the render loop so input handling is consistent throughout.
 - `terminal.rs` — crossterm-based raw-mode I/O and the input loop. Visibility is resolved with a true per-pixel depth buffer (not draw order): since each projected quad is a planar parallelogram under orthographic projection, both screen position and depth are exact affine functions of its two local axes, so a single 2×2 solve at rasterization time recovers correct containment and depth together. Rendering uses the half-block character trick (`▀` with distinct foreground/background colors) to roughly double effective vertical resolution.
 
 ## Module layout
@@ -65,7 +82,7 @@ Each `Cuboid` layer's own rotation axis must pass through that layer's own cente
 - `src/shape.rs` — `Shape` trait, `Move` struct.
 - `src/shapes/cuboid.rs` — `Cuboid`, the box shape's `impl Shape`.
 - `src/rubix.rs` — `Rubix`: the puzzle engine (`solved`, `rotate`, `apply`, `face`).
-- `src/render/` — the interactive terminal renderer (`camera.rs`, `projection.rs`, `terminal.rs`), a consumer of `Rubix`'s public API only.
+- `src/render/` — the interactive terminal renderer (`setup.rs` size picker, `camera.rs`, `projection.rs`, `terminal.rs`), a consumer of `Rubix`'s public API only.
 - `tests/rubix_tests.rs` — integration tests for the engine.
 - `tests/render_projection_tests.rs` — integration tests for the renderer's pure camera/projection math.
 
