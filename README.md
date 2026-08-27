@@ -2,16 +2,51 @@
 
 A generic twisty-puzzle emulator, starting with rectangular box shapes (X × Y × Z, not necessarily equal), with the long-term goal of supporting arbitrary shapes (Pyraminx, etc.).
 
-It ships with an interactive 3D renderer that runs right in your terminal.
+It ships with two interactive 3D renderers: a cross-platform GUI window (the default)
+and a fallback that runs right in your terminal.
+
+![RubixEmulator](examples/image.png)
 
 ## Running it
 
 ```
-cargo run
+cargo run              # GUI window, 3 × 3 × 3
+cargo run -- 4 4 4     # GUI window, custom X Y Z dimensions
+cargo run -- --tui     # terminal renderer instead
 ```
 
-This first shows a small setup screen for choosing the puzzle's size — the three
-axes (X, Y, Z) are set independently, so `3 × 3 × 5` is as valid as `3 × 3 × 3`.
+The three axes (X, Y, Z) are always set independently, so `3 × 3 × 5` is as valid
+as `3 × 3 × 3`.
+
+### GUI window (default)
+
+Opens a `three-d` window (winit + OpenGL, builds unchanged on Windows, macOS, and
+Linux) showing the solved puzzle, with an `egui` overlay of three panels:
+
+- **Setup** — sliders for X / Y / Z (1–10 pieces per axis); "New puzzle" rebuilds at
+  that size, "Reset" restores the current size to solved.
+- **Moves** — a button per legal move: click for clockwise, the `′` button for
+  counterclockwise.
+- **Controls** — "Scramble" / "Solve" buttons plus the input reference below.
+
+| Input | Action |
+| --- | --- |
+| Drag empty space | Orbit the camera |
+| Scroll | Zoom in / out |
+| Drag a sticker | Turn that sticker's layer in the drag direction |
+| A letter (`r`, `u`, `f`, `l`, `d`, `b`, ...) | Turn the matching face clockwise |
+| Shift + letter | Turn the matching face counterclockwise |
+| A digit (`2`–`9`) then a letter | Turn an inner slice that many layers in, e.g. `2` then `r` for `2R` |
+| Space | Scramble (25 random moves) |
+| Enter | Solve (undo everything back to solved) |
+| `q` / `Esc` | Quit |
+
+A single layer turn is animated; scramble and solve snap.
+
+### Terminal renderer (`--tui`)
+
+Starts with a small setup screen for choosing the puzzle's size, then opens an
+interactive isometric view rendered with half-block characters.
 
 **Setup screen:**
 
@@ -22,24 +57,11 @@ axes (X, Y, Z) are set independently, so `3 × 3 × 5` is as valid as `3 × 3 ×
 | Enter | Start the puzzle at that size |
 | `q` / `Esc` | Quit |
 
-It then opens an interactive isometric view of the solved puzzle.
+**Controls:** same keys as the GUI window (arrow keys orbit, `+` / `-` zoom).
 
-> **Note:** the renderer is an interactive terminal program — run it from a real
-> terminal (the integrated terminal, or the "Debug RubixEmulator" launch config).
+> **Note:** the terminal renderer is an interactive terminal program — run it from a
+> real terminal (the integrated terminal, or the "Debug RubixEmulator" launch config).
 > VS Code's build/run *task* output panel isn't a TTY, so keystrokes won't reach it.
-
-**Controls:**
-
-| Key | Action |
-| --- | --- |
-| Arrow keys | Orbit the camera |
-| `+` / `-` | Zoom in / out |
-| A letter (`r`, `u`, `f`, `l`, `d`, `b`, ...) | Turn the matching face clockwise |
-| Shift + letter | Turn the matching face counterclockwise |
-| A digit (`2`–`9`) then a letter | Turn an inner slice that many layers in, e.g. `2` then `r` for `2R` (Shift on the letter for counterclockwise) |
-| Space | Scramble (25 random moves) |
-| Enter | Solve (undo everything back to solved) |
-| `q` / `Esc` | Quit |
 
 Face letters follow standard cube notation (`R`/`L`, `U`/`D`, `F`/`B`), with wide-move numbering and `M`/`E`/`S` slice names where they apply — see [Architecture](#architecture) below.
 
@@ -69,11 +91,20 @@ Each `Cuboid` layer's own rotation axis must pass through that layer's own cente
 
 **`Cuboid::moves()` names each move with standard cube notation** (`R`/`L`, `U`/`D`, `F`/`B` for outer layers; `2R`/`3R`/... counting depth in from a face for wider cubes; `M`/`E`/`S` for the exact middle layer only when that axis's dimension is exactly 3). This is a label on `Move`, not a notation parser — there's still no string-to-move parsing (e.g. "R U R'").
 
-**The terminal renderer is a pure consumer of the engine**, kept out of `Rubix`/`Shape`/`Piece` entirely. `src/render/` reads `Rubix::pieces()`/`Rubix::moves()`/`Rubix::apply()` and nothing else:
+**Both renderers are pure consumers of the engine**, kept out of `Rubix`/`Shape`/`Piece` entirely. `src/render/` reads `Rubix::pieces()`/`Rubix::moves()`/`Rubix::apply()`/`scramble()`/`solve()` and nothing else. Code shared by both lives at the top of `src/render/` (`geometry.rs` for cubie/sticker geometry, `rng.rs` for a small xorshift RNG).
+
+*Terminal renderer* (`src/render/terminal/`):
 - `camera.rs` — a simple orbiting camera (azimuth/elevation/zoom), reusing `Vec3::rotate_about`.
 - `projection.rs` — isometric 3D→2D projection. Every sticker face (all 6 sides of every piece, always) gets projected, plus a full-size opaque "plastic body" backing behind it, so gaps between inset stickers never show through to hidden geometry.
 - `setup.rs` — the pre-launch size picker; runs under the same raw-mode guard as the render loop so input handling is consistent throughout.
-- `terminal.rs` — crossterm-based raw-mode I/O and the input loop. Visibility is resolved with a true per-pixel depth buffer (not draw order): since each projected quad is a planar parallelogram under orthographic projection, both screen position and depth are exact affine functions of its two local axes, so a single 2×2 solve at rasterization time recovers correct containment and depth together. Rendering uses the half-block character trick (`▀` with distinct foreground/background colors) to roughly double effective vertical resolution.
+- `input.rs` / `raster.rs` — crossterm-based raw-mode I/O and the input loop, and the rasterizer. Visibility is resolved with a true per-pixel depth buffer (not draw order): since each projected quad is a planar parallelogram under orthographic projection, both screen position and depth are exact affine functions of its two local axes, so a single 2×2 solve at rasterization time recovers correct containment and depth together. Rendering uses the half-block character trick (`▀` with distinct foreground/background colors) to roughly double effective vertical resolution.
+
+*GUI window renderer* (`src/render/window/`), built on `three-d` (winit + OpenGL/WebGL). `mod.rs` owns the per-session state and per-frame pipeline (draw GUI → read input into one `Action` → apply → advance animation → render); the rest is split by concern:
+- `scene.rs` — builds the drawable scene: one black plastic cube per cubie with a slightly raised colored tile on each stickered face.
+- `panels.rs` — the `egui` overlay (Setup / Moves / Controls). A panel only ever produces an `Action`; it never touches the puzzle.
+- `input.rs` — keyboard handling, including the digit-then-letter inner-slice prefix.
+- `drag.rs` — resolves a mouse drag on a sticker into a specific layer turn and direction.
+- `animation.rs` — animates a single layer turn; scramble/solve just rebuild the scene.
 
 ## Module layout
 
@@ -82,10 +113,13 @@ Each `Cuboid` layer's own rotation axis must pass through that layer's own cente
 - `src/shape.rs` — `Shape` trait, `Move` struct.
 - `src/shapes/cuboid.rs` — `Cuboid`, the box shape's `impl Shape`.
 - `src/rubix.rs` — `Rubix`: the puzzle engine (`solved`, `rotate`, `apply`, `face`).
-- `src/render/` — the interactive terminal renderer (`setup.rs` size picker, `camera.rs`, `projection.rs`, `terminal.rs`), a consumer of `Rubix`'s public API only.
+- `src/render/` — both renderers, consumers of `Rubix`'s public API only:
+  - `geometry.rs`, `rng.rs` — shared geometry and RNG.
+  - `terminal/` — the terminal renderer (`setup.rs` size picker, `camera.rs`, `projection.rs`, `input.rs`, `raster.rs`).
+  - `window/` — the `three-d` GUI window (`scene.rs`, `panels.rs`, `input.rs`, `drag.rs`, `animation.rs`).
 - `tests/rubix_tests.rs` — integration tests for the engine.
 - `tests/render_projection_tests.rs` — integration tests for the renderer's pure camera/projection math.
 
 ## Scope so far
 
-The state model, rotation engine, and an interactive terminal renderer exist for `Cuboid` shapes. Not yet implemented: a move-notation parser (e.g. "R U R'"), a solver, or additional shapes (Pyraminx, etc.). Colors are a fixed placeholder mapping (`+X` red, `-X` orange, `+Y` yellow, `-Y` white, `+Z` green, `-Z` blue) — not yet configurable.
+The state model, rotation engine, and two interactive renderers (a `three-d` GUI window and a terminal renderer) exist for `Cuboid` shapes. Not yet implemented: a move-notation parser (e.g. "R U R'"), a real solver (`solve` just replays the move history in reverse), or additional shapes (Pyraminx, etc.). Colors are a fixed placeholder mapping (`+X` red, `-X` orange, `+Y` yellow, `-Y` white, `+Z` green, `-Z` blue) — not yet configurable.
