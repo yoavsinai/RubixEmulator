@@ -4,6 +4,7 @@
 use three_d::*;
 
 use crate::piece::Color as PieceColor;
+use crate::render::projection::cube_center_offset;
 use crate::rubix::Rubix;
 use crate::vec3::Vec3 as ModelVec3;
 
@@ -39,7 +40,7 @@ pub(crate) struct Scene {
 impl Scene {
     /// Builds the drawable puzzle from the current model state.
     pub fn build(context: &Context, rubix: &Rubix) -> Self {
-        let offset = cube_center_offset(rubix);
+        let offset = cube_center_offset(rubix.pieces());
         let body_material = PhysicalMaterial::new_opaque(
             context,
             &CpuMaterial {
@@ -107,18 +108,6 @@ fn tile_extent(component: f32) -> f32 {
     } else {
         STICKER_HALF
     }
-}
-
-/// The center of the piece grid's bounding box, so `build` can recenter it on the origin.
-fn cube_center_offset(rubix: &Rubix) -> ModelVec3 {
-    let mut min = ModelVec3::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
-    let mut max = ModelVec3::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
-    for piece in rubix.pieces() {
-        let p = piece.position;
-        min = ModelVec3::new(min.x.min(p.x), min.y.min(p.y), min.z.min(p.z));
-        max = ModelVec3::new(max.x.max(p.x), max.y.max(p.y), max.z.max(p.z));
-    }
-    ModelVec3::new((min.x + max.x) / 2.0, (min.y + max.y) / 2.0, (min.z + max.z) / 2.0)
 }
 
 fn sticker_srgba(color: PieceColor) -> Srgba {

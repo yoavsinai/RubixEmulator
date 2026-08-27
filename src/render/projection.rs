@@ -162,3 +162,16 @@ pub fn build_sticker_quads(
 
     quads
 }
+
+/// The center of a piece cloud's bounding box. Both renderers use it to recenter a shape's
+/// corner-origin piece grid on the world origin before projecting.
+pub fn cube_center_offset(pieces: &[Piece]) -> Vec3 {
+    let mut min = Vec3::new(f64::INFINITY, f64::INFINITY, f64::INFINITY);
+    let mut max = Vec3::new(f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+    for piece in pieces {
+        let p = piece.position;
+        min = Vec3::new(min.x.min(p.x), min.y.min(p.y), min.z.min(p.z));
+        max = Vec3::new(max.x.max(p.x), max.y.max(p.y), max.z.max(p.z));
+    }
+    Vec3::new((min.x + max.x) / 2.0, (min.y + max.y) / 2.0, (min.z + max.z) / 2.0)
+}

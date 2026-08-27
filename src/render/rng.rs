@@ -4,6 +4,12 @@ use std::time::{SystemTime, UNIX_EPOCH};
 /// project needs randomness, so it isn't worth pulling in a whole RNG crate for it.
 pub struct Rng(u64);
 
+impl Default for Rng {
+    fn default() -> Self {
+        Rng::new()
+    }
+}
+
 impl Rng {
     pub fn new() -> Self {
         let seed = SystemTime::now()
