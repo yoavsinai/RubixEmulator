@@ -107,14 +107,14 @@ fn moves_panel(ctx: &egui::Context, moves: &[Move], action: &mut Option<Action>)
         .anchor(egui::Align2::RIGHT_TOP, [-12.0, 12.0])
         .resizable(false)
         .show(ctx, |ui| {
-            ui.label("click = clockwise, ′ = counterclockwise");
+            ui.label("click = clockwise, ' = counterclockwise");
             egui::ScrollArea::vertical().max_height(560.0).show(ui, |ui| {
                 egui::Grid::new("move-grid").num_columns(2).spacing([6.0, 4.0]).show(ui, |ui| {
                     for m in moves {
                         if ui.button(&m.name).clicked() {
                             *action = Some(Action::Move { name: m.name.clone(), clockwise: true });
                         }
-                        if ui.button(format!("{}′", m.name)).clicked() {
+                        if ui.button(format!("{}'", m.name)).clicked() {
                             *action = Some(Action::Move { name: m.name.clone(), clockwise: false });
                         }
                         ui.end_row();
