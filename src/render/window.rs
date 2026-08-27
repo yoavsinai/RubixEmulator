@@ -42,6 +42,23 @@ struct DragState {
     current_pixel: (f32, f32),
 }
 
+/// How long a single layer turn takes to sweep from start to finish.
+const TURN_ANIMATION_MS: f64 = 140.0;
+
+/// A layer turn playing out visually. The move is already applied to the model, so this
+/// just sweeps the affected meshes from `-applied_degrees` back to their final pose.
+struct TurnAnimation {
+    /// The turn axis, a unit vector in scene space (same as the move's engine axis).
+    axis: Vec3,
+    /// The signed angle already applied to the model, in degrees.
+    applied_degrees: f32,
+    /// Per-object: is this mesh part of the turning layer?
+    affected: Vec<bool>,
+    /// Per-object: its final transform, to rotate away from and settle back onto.
+    base: Vec<Mat4>,
+    elapsed_ms: f64,
+}
+
 /// `Cuboid` spaces adjacent layers 2 raw units apart; dividing by this normalizes to one
 /// world unit per cubie so the scene's scale doesn't depend on that engine-internal choice.
 const WORLD_UNITS_PER_CUBIE: f32 = 2.0;
@@ -91,9 +108,11 @@ pub fn run_window(
     let mut dims = initial_dims;
     let mut rubix = build(dims);
     let mut moves = rubix.moves();
-    let (mut objects, mut sticker_refs) = build_objects(&context, &rubix);
+    let mut scene = build_objects(&context, &rubix);
     let mut rng = Rng::new();
 
+    // A layer turn playing out visually, if any.
+    let mut anim: Option<TurnAnimation> = None;
     // A layer turn the user is dragging out with the mouse, if any.
     let mut drag: Option<DragState> = None;
     // The setup panel edits these until "New puzzle" is pressed.
@@ -129,8 +148,8 @@ pub fn run_window(
                     if *handled {
                         continue;
                     }
-                    if let Some(hit) = pick(&context, &camera, *position, &objects) {
-                        if let Some(Some(sticker)) = sticker_refs.get(hit.geometry_id as usize) {
+                    if let Some(hit) = pick(&context, &camera, *position, &scene.objects) {
+                        if let Some(Some(sticker)) = scene.sticker_refs.get(hit.geometry_id as usize) {
                             drag = Some(DragState {
                                 sticker: *sticker,
                                 hit: hit.position,
@@ -189,10 +208,19 @@ pub fn run_window(
         control.handle_events(&mut camera, &mut frame_input.events);
 
         let mut dirty = false;
+        // For a single turn, the move that was applied and the signed angle it applied,
+        // so the visual can be animated after the meshes are rebuilt at their final pose.
+        let mut turned: Option<(usize, f32)> = None;
         match action {
             Some(Action::Move(name, clockwise)) => {
-                if let Some(m) = moves.iter().find(|m| m.name == name) {
-                    rubix.apply(m, clockwise);
+                if let Some(idx) = moves.iter().position(|m| m.name == name) {
+                    rubix.apply(&moves[idx], clockwise);
+                    let signed = if clockwise {
+                        moves[idx].angle_degrees
+                    } else {
+                        -moves[idx].angle_degrees
+                    };
+                    turned = Some((idx, signed as f32));
                     dirty = true;
                 }
             }
@@ -221,15 +249,50 @@ pub fn run_window(
         }
 
         if dirty {
-            let (o, r) = build_objects(&context, &rubix);
-            objects = o;
-            sticker_refs = r;
+            scene = build_objects(&context, &rubix);
+            anim = None;
+        }
+
+        // Kick off the turn animation now that the meshes sit at their final pose.
+        if let Some((idx, signed)) = turned {
+            let m = &moves[idx];
+            let affected: Vec<bool> = scene
+                .piece_index
+                .iter()
+                .map(|&pi| (m.selector)(&rubix.pieces()[pi]))
+                .collect();
+            let base: Vec<Mat4> = scene.objects.iter().map(|o| o.transformation()).collect();
+            anim = Some(TurnAnimation {
+                axis: vec3(m.axis.x as f32, m.axis.y as f32, m.axis.z as f32),
+                applied_degrees: signed,
+                affected,
+                base,
+                elapsed_ms: 0.0,
+            });
+        }
+
+        // Advance the turn animation: sweep the affected meshes from a full turn behind
+        // their final pose up to it, then settle and clear.
+        if let Some(a) = &mut anim {
+            a.elapsed_ms += frame_input.elapsed_time;
+            let t = (a.elapsed_ms / TURN_ANIMATION_MS).min(1.0) as f32;
+            let eased = 1.0 - (1.0 - t).powi(3);
+            let angle = -a.applied_degrees * (1.0 - eased);
+            let rotation = Mat4::from_axis_angle(a.axis, degrees(angle));
+            for (i, &is_affected) in a.affected.iter().enumerate() {
+                if is_affected {
+                    scene.objects[i].set_transformation(rotation * a.base[i]);
+                }
+            }
+            if t >= 1.0 {
+                anim = None;
+            }
         }
 
         let screen = frame_input.screen();
         screen
             .clear(ClearState::color_and_depth(0.09, 0.09, 0.11, 1.0, 1.0))
-            .render(&camera, &objects, &[&ambient, &key_light, &fill_light]);
+            .render(&camera, &scene.objects, &[&ambient, &key_light, &fill_light]);
         let _ = screen.write(|| gui.render());
 
         FrameOutput { exit, ..Default::default() }
@@ -312,13 +375,20 @@ fn moves_panel(ctx: &egui::Context, moves: &[Move], action: &mut Option<Action>)
         });
 }
 
-/// Builds one GPU object per cubie body plus one per visible sticker, centered on the origin.
-/// Also returns a parallel list naming the sticker behind each object (`None` for bodies),
-/// so a mouse pick — which reports an index into the object list — can resolve to a move.
-fn build_objects(
-    context: &Context,
-    rubix: &Rubix,
-) -> (Vec<Gm<Mesh, PhysicalMaterial>>, Vec<Option<StickerRef>>) {
+/// The drawable puzzle: one mesh per cubie body plus one per visible sticker, all centered
+/// on the origin, with per-object bookkeeping kept in lockstep with `objects`.
+struct Scene {
+    objects: Vec<Gm<Mesh, PhysicalMaterial>>,
+    /// The sticker behind each object (`None` for a body), so a mouse pick — which reports
+    /// an index into `objects` — can name the piece and face it hit.
+    sticker_refs: Vec<Option<StickerRef>>,
+    /// The index into `rubix.pieces()` of the piece each object belongs to, so a turn
+    /// animation can ask a move's selector which meshes are in the moving layer.
+    piece_index: Vec<usize>,
+}
+
+/// Builds the drawable puzzle from the current model state.
+fn build_objects(context: &Context, rubix: &Rubix) -> Scene {
     let offset = cube_center_offset(rubix);
     let body_material = PhysicalMaterial::new_opaque(
         context,
@@ -331,9 +401,10 @@ fn build_objects(
     );
 
     let mut objects = Vec::new();
-    let mut refs: Vec<Option<StickerRef>> = Vec::new();
+    let mut sticker_refs: Vec<Option<StickerRef>> = Vec::new();
+    let mut piece_index: Vec<usize> = Vec::new();
 
-    for piece in rubix.pieces() {
+    for (pi, piece) in rubix.pieces().iter().enumerate() {
         let center = vec3(
             ((piece.position.x - offset.x) as f32) / WORLD_UNITS_PER_CUBIE,
             ((piece.position.y - offset.y) as f32) / WORLD_UNITS_PER_CUBIE,
@@ -345,7 +416,8 @@ fn build_objects(
             Mat4::from_translation(center) * Mat4::from_nonuniform_scale(CUBIE_HALF, CUBIE_HALF, CUBIE_HALF),
         );
         objects.push(body);
-        refs.push(None);
+        sticker_refs.push(None);
+        piece_index.push(pi);
 
         for (&dir_key, &color) in &piece.stickers {
             let normal = ModelVec3::from(dir_key);
@@ -368,14 +440,15 @@ fn build_objects(
                     * Mat4::from_nonuniform_scale(sx, sy, sz),
             );
             objects.push(tile);
-            refs.push(Some(StickerRef {
+            sticker_refs.push(Some(StickerRef {
                 piece_position: piece.position,
                 normal,
             }));
+            piece_index.push(pi);
         }
     }
 
-    (objects, refs)
+    Scene { objects, sticker_refs, piece_index }
 }
 
 /// Turns a finished sticker drag into a named move, or `None` if the drag was too small or
