@@ -17,8 +17,7 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
 
     let dims = parse_dims(&args).unwrap_or((3, 3, 3));
-    let rubix = Rubix::solved(Box::new(Cuboid::new(dims.0, dims.1, dims.2)));
-    render::run_window(rubix)
+    render::run_window(dims, |(x, y, z)| Rubix::solved(Box::new(Cuboid::new(x, y, z))))
 }
 
 fn parse_dims(args: &[String]) -> Option<(usize, usize, usize)> {
