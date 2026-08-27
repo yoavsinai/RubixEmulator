@@ -4,5 +4,4 @@ pub mod setup;
 pub mod terminal;
 
 pub use camera::Camera;
-pub use setup::run_setup;
-pub use terminal::run_interactive;
+pub use terminal::{run_interactive, run_with_setup};

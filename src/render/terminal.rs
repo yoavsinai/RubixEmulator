@@ -78,12 +78,31 @@ enum Action {
 /// camera orbits or face turns, and redraws, until the user quits.
 pub fn run_interactive(mut rubix: Rubix) -> std::io::Result<()> {
     let _guard = RawModeGuard::new()?;
+    run_loop(&mut rubix)
+}
+
+/// Owns the terminal for the whole session: shows the size-picker setup screen, then
+/// (unless the user quit there) builds the puzzle via `build` and runs the render loop —
+/// all under a single raw-mode guard so input handling stays consistent throughout.
+pub fn run_with_setup(
+    default_dims: (usize, usize, usize),
+    build: impl FnOnce((usize, usize, usize)) -> Rubix,
+) -> std::io::Result<()> {
+    let _guard = RawModeGuard::new()?;
+    let Some(dims) = crate::render::setup::choose_dimensions(default_dims)? else {
+        return Ok(());
+    };
+    let mut rubix = build(dims);
+    run_loop(&mut rubix)
+}
+
+fn run_loop(rubix: &mut Rubix) -> std::io::Result<()> {
     let mut camera = Camera::new();
     let mut rng = Rng::new();
     let moves = rubix.moves();
 
     loop {
-        draw_frame(&rubix, &camera)?;
+        draw_frame(rubix, &camera)?;
 
         if event::poll(Duration::from_millis(100))? {
             if let Event::Key(key) = event::read()? {

@@ -7,8 +7,6 @@ use crossterm::style::{Print, ResetColor, SetAttribute, Attribute};
 use crossterm::terminal::{Clear, ClearType};
 use crossterm::queue;
 
-use crate::render::terminal::RawModeGuard;
-
 /// Smallest and largest number of pieces allowed along any one axis. 1 is a valid
 /// degenerate slab; the upper bound just keeps the terminal renderer usable.
 const MIN_DIM: usize = 1;
@@ -17,10 +15,11 @@ const MAX_DIM: usize = 10;
 const AXIS_LABELS: [&str; 3] = ["X (width)", "Y (height)", "Z (depth)"];
 
 /// Shows a small interactive setup screen for picking the puzzle's three axis sizes.
-/// Returns the chosen `(x, y, z)` dimensions, or `None` if the user quit.
-pub fn run_setup(default: (usize, usize, usize)) -> std::io::Result<Option<(usize, usize, usize)>> {
-    let _guard = RawModeGuard::new()?;
-
+/// Returns the chosen `(x, y, z)` dimensions, or `None` if the user quit. Assumes raw
+/// mode / the alternate screen are already active (owned by the caller).
+pub fn choose_dimensions(
+    default: (usize, usize, usize),
+) -> std::io::Result<Option<(usize, usize, usize)>> {
     let mut dims = [default.0, default.1, default.2];
     let mut selected = 0usize;
 
