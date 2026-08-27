@@ -47,10 +47,10 @@ impl Rng {
 /// Enables raw mode + the alternate screen + hides the cursor on construction, and always
 /// restores all three on drop (including on panic), so the caller's terminal is never left
 /// corrupted by an interrupted render loop.
-struct RawModeGuard;
+pub(crate) struct RawModeGuard;
 
 impl RawModeGuard {
-    fn new() -> std::io::Result<Self> {
+    pub(crate) fn new() -> std::io::Result<Self> {
         enable_raw_mode()?;
         stdout().execute(EnterAlternateScreen)?;
         stdout().execute(Hide)?;
