@@ -12,6 +12,7 @@
 
 mod animation;
 mod drag;
+mod history;
 mod input;
 mod panels;
 mod scene;
@@ -24,6 +25,7 @@ use crate::shape::Move;
 
 use animation::TurnAnimation;
 use drag::DragState;
+use history::MoveHistory;
 use panels::UiState;
 use scene::Scene;
 
@@ -80,6 +82,7 @@ struct WindowApp {
     anim: Option<TurnAnimation>,
     drag: Option<DragState>,
     ui: UiState,
+    history: MoveHistory,
 }
 
 impl WindowApp {
@@ -125,6 +128,7 @@ impl WindowApp {
             anim: None,
             drag: None,
             ui: UiState::new(dims),
+            history: MoveHistory::default(),
         }
     }
 
@@ -166,11 +170,12 @@ impl WindowApp {
         viewport: Viewport,
         device_pixel_ratio: f32,
     ) -> Option<Action> {
-        let Self { gui, ui, dims, moves, .. } = self;
+        let Self { gui, ui, dims, moves, history, .. } = self;
         let dims = *dims;
         let mut action = None;
         gui.update(events, accumulated_time, viewport, device_pixel_ratio, |ctx| {
             action = panels::draw(ctx, ui, dims, moves);
+            history::draw(ctx, history);
         });
         action
     }
@@ -232,6 +237,7 @@ impl WindowApp {
                     return;
                 };
                 self.rubix.apply(&self.moves[idx], clockwise);
+                self.history.record(&self.moves[idx].name, clockwise);
                 let signed = (if clockwise {
                     self.moves[idx].angle_degrees
                 } else {
@@ -244,15 +250,18 @@ impl WindowApp {
             Action::Scramble => {
                 let Self { rubix, rng, .. } = self;
                 rubix.scramble(SCRAMBLE_MOVE_COUNT, |bound| rng.next(bound));
+                self.history.note(&format!("scramble x{SCRAMBLE_MOVE_COUNT}"));
                 self.rebuild_scene();
             }
             Action::Solve => {
                 self.rubix.solve();
+                self.history.clear();
                 self.rebuild_scene();
             }
             Action::Reset => {
                 self.rubix = (self.build)(self.dims);
                 self.moves = self.rubix.moves();
+                self.history.clear();
                 self.rebuild_scene();
             }
             Action::Rebuild(x, y, z) => {
@@ -261,6 +270,7 @@ impl WindowApp {
                 self.rubix = (self.build)(self.dims);
                 self.moves = self.rubix.moves();
                 self.ui.keys.clear_pending();
+                self.history.clear();
                 self.rebuild_scene();
             }
         }
