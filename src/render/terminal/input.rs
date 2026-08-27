@@ -3,8 +3,9 @@
 
 use crossterm::event::{KeyCode, KeyEvent};
 
-use crate::render::camera::Camera;
 use crate::shape::Move;
+
+use super::camera::Camera;
 
 const ORBIT_STEP_DEGREES: f64 = 5.0;
 const ZOOM_STEP_FACTOR: f64 = 1.15;

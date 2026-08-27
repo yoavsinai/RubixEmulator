@@ -4,7 +4,7 @@
 use three_d::*;
 
 use crate::piece::Color as PieceColor;
-use crate::render::projection::cube_center_offset;
+use crate::render::geometry::cube_center_offset;
 use crate::rubix::Rubix;
 use crate::vec3::Vec3 as ModelVec3;
 

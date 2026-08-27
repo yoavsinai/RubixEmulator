@@ -9,9 +9,11 @@ use crossterm::terminal::{Clear, ClearType};
 use crossterm::queue;
 
 use crate::piece::Color;
-use crate::render::camera::Camera;
-use crate::render::projection::{self, QuadKind, StickerQuad};
+use crate::render::geometry::cube_center_offset;
 use crate::rubix::Rubix;
+
+use super::camera::Camera;
+use super::projection::{self, QuadKind, StickerQuad};
 
 /// Upper-half-block: setting its foreground to one color and its background to another packs
 /// two vertically-stacked pixels into one character cell, roughly doubling vertical
@@ -35,7 +37,7 @@ pub(super) fn draw_frame(rubix: &Rubix, camera: &Camera) -> std::io::Result<()> 
     let origin_subrow = subrows as f64 / 2.0;
     let scale = 6.0_f64.min(cols as f64 / 6.0).min(subrows as f64 / 6.0);
 
-    let offset = projection::cube_center_offset(rubix.pieces());
+    let offset = cube_center_offset(rubix.pieces());
     let quads = projection::build_sticker_quads(rubix.pieces(), camera, offset);
 
     let mut framebuffer: Vec<Option<CtColor>> = vec![None; cols * subrows];

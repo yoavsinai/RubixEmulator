@@ -2,7 +2,7 @@
 
 use three_d::*;
 
-use crate::render::projection::perpendicular_axes;
+use crate::render::geometry::perpendicular_axes;
 use crate::rubix::Rubix;
 use crate::shape::Move;
 use crate::vec3::{LatticeKey, Vec3 as ModelVec3};

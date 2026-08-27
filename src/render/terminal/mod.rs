@@ -1,8 +1,12 @@
 //! The terminal renderer: owns raw mode + the alternate screen, then loops drawing the
 //! puzzle ([`raster`]) and folding key presses ([`input`]) into moves.
 
+pub mod camera;
+pub mod projection;
+
 mod input;
 mod raster;
+mod setup;
 
 use std::io::stdout;
 use std::time::Duration;
@@ -14,9 +18,10 @@ use crossterm::terminal::{
 };
 use crossterm::ExecutableCommand;
 
-use crate::render::camera::Camera;
 use crate::render::rng::Rng;
 use crate::rubix::Rubix;
+
+use camera::Camera;
 
 use input::{handle_key, Action};
 use raster::draw_frame;
@@ -59,7 +64,7 @@ pub fn run_with_setup(
     build: impl FnOnce((usize, usize, usize)) -> Rubix,
 ) -> std::io::Result<()> {
     let _guard = RawModeGuard::new()?;
-    let Some(dims) = crate::render::setup::choose_dimensions(default_dims)? else {
+    let Some(dims) = setup::choose_dimensions(default_dims)? else {
         return Ok(());
     };
     let mut rubix = build(dims);
