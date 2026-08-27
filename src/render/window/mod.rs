@@ -38,6 +38,8 @@ enum Action {
     Solve,
     Reset,
     Rebuild(usize, usize, usize),
+    /// Undo applied moves until only this many remain in the history.
+    UndoTo(usize),
 }
 
 /// Opens the window and runs the interactive render loop until the user quits. `build`
@@ -174,8 +176,7 @@ impl WindowApp {
         let dims = *dims;
         let mut action = None;
         gui.update(events, accumulated_time, viewport, device_pixel_ratio, |ctx| {
-            action = panels::draw(ctx, ui, dims, moves);
-            history::draw(ctx, history);
+            action = panels::draw(ctx, ui, dims, moves).or_else(|| history::draw(ctx, history));
         });
         action
     }
@@ -249,8 +250,10 @@ impl WindowApp {
             }
             Action::Scramble => {
                 let Self { rubix, rng, .. } = self;
-                rubix.scramble(SCRAMBLE_MOVE_COUNT, |bound| rng.next(bound));
-                self.history.note(&format!("scramble x{SCRAMBLE_MOVE_COUNT}"));
+                let applied = rubix.scramble(SCRAMBLE_MOVE_COUNT, |bound| rng.next(bound));
+                for (name, clockwise) in &applied {
+                    self.history.record(name, *clockwise);
+                }
                 self.rebuild_scene();
             }
             Action::Solve => {
@@ -271,6 +274,14 @@ impl WindowApp {
                 self.moves = self.rubix.moves();
                 self.ui.keys.clear_pending();
                 self.history.clear();
+                self.rebuild_scene();
+            }
+            Action::UndoTo(target) => {
+                let mut remaining = self.history.len().saturating_sub(target);
+                while remaining > 0 && self.rubix.undo_last() {
+                    remaining -= 1;
+                }
+                self.history.truncate(target);
                 self.rebuild_scene();
             }
         }

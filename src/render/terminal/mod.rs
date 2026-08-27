@@ -88,7 +88,9 @@ fn run_loop(rubix: &mut Rubix) -> std::io::Result<()> {
             match handle_key(key, &mut camera, &moves, &mut pending_depth) {
                 Action::Quit => break,
                 Action::ApplyMove(idx, clockwise) => rubix.apply(&moves[idx], clockwise),
-                Action::Scramble => rubix.scramble(SCRAMBLE_MOVE_COUNT, |bound| rng.next(bound)),
+                Action::Scramble => {
+                    rubix.scramble(SCRAMBLE_MOVE_COUNT, |bound| rng.next(bound));
+                }
                 Action::Solve => rubix.solve(),
                 Action::None => {}
             }

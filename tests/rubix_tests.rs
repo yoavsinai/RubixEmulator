@@ -208,6 +208,25 @@ fn solve_undoes_a_scramble() {
 }
 
 #[test]
+fn undo_last_steps_back_one_move_at_a_time() {
+    let mut rubix = Rubix::solved(Box::new(Cuboid::new(3, 3, 3)));
+    let solved: Vec<_> = rubix.pieces().to_vec();
+
+    let moves = rubix.moves();
+    let r = moves.iter().find(|m| m.name == "R").unwrap();
+    let u = moves.iter().find(|m| m.name == "U").unwrap();
+    rubix.apply(r, true);
+    let after_r: Vec<_> = rubix.pieces().to_vec();
+    rubix.apply(u, true);
+
+    assert!(rubix.undo_last());
+    assert_eq!(rubix.pieces().to_vec(), after_r, "undo should return to the state after R");
+    assert!(rubix.undo_last());
+    assert_eq!(rubix.pieces().to_vec(), solved);
+    assert!(!rubix.undo_last(), "nothing left to undo");
+}
+
+#[test]
 fn solve_undoes_manually_applied_moves_in_any_combination() {
     let mut rubix = Rubix::solved(Box::new(Cuboid::new(3, 3, 3)));
     let solved: Vec<_> = rubix.pieces().to_vec();

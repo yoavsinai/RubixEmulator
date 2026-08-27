@@ -85,29 +85,46 @@ impl Rubix {
     /// order, each by re-selecting the same pieces it touched (identified by where they
     /// ended up) and spinning them back by the opposite angle.
     pub fn solve(&mut self) {
-        while let Some(entry) = self.history.pop() {
-            let target: HashSet<LatticeKey> =
-                entry.positions_after.iter().map(|&p| LatticeKey::from(p)).collect();
+        while self.undo_last() {}
+    }
 
-            self.rotate(
-                |piece| target.contains(&LatticeKey::from(piece.position)),
-                entry.axis,
-                -entry.angle_degrees,
-            );
-        }
+    /// Undoes just the single most recent applied move, re-selecting the pieces it
+    /// touched (by where they ended up) and spinning them back. Returns `false` when
+    /// there was nothing left to undo.
+    pub fn undo_last(&mut self) -> bool {
+        let Some(entry) = self.history.pop() else {
+            return false;
+        };
+        let target: HashSet<LatticeKey> =
+            entry.positions_after.iter().map(|&p| LatticeKey::from(p)).collect();
+        self.rotate(
+            |piece| target.contains(&LatticeKey::from(piece.position)),
+            entry.axis,
+            -entry.angle_degrees,
+        );
+        true
     }
 
     /// Applies `move_count` random legal moves. Takes a `random` closure — given an
     /// exclusive upper bound, it returns a value in `0..bound` — rather than reaching for
     /// a random number generator itself, so the engine stays dependency-free and this is
     /// deterministically testable; callers that need real randomness supply their own RNG.
-    pub fn scramble(&mut self, move_count: usize, mut random: impl FnMut(usize) -> usize) {
+    /// Returns each move it applied, in order, as `(notation, clockwise)` — so a caller
+    /// showing a move log can list the scramble turn by turn.
+    pub fn scramble(
+        &mut self,
+        move_count: usize,
+        mut random: impl FnMut(usize) -> usize,
+    ) -> Vec<(String, bool)> {
         let moves = self.moves();
+        let mut applied = Vec::with_capacity(move_count);
         for _ in 0..move_count {
             let m = &moves[random(moves.len())];
             let clockwise = random(2) == 0;
             self.apply(m, clockwise);
+            applied.push((m.name.clone(), clockwise));
         }
+        applied
     }
 
     /// Derived view: every (position, color) currently showing on the given face.
