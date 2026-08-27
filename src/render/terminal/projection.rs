@@ -1,6 +1,8 @@
 use crate::piece::{Color, Piece};
-use crate::render::camera::Camera;
+use crate::render::geometry::perpendicular_axes;
 use crate::vec3::Vec3;
+
+use super::camera::Camera;
 
 /// A projected point in character-cell screen space, plus its camera-space depth
 /// (larger depth = farther from the camera).
@@ -72,18 +74,6 @@ pub fn project_point(world: Vec3, camera: &Camera) -> ScreenPoint {
 /// utility, e.g. for tests that reason about a single face's orientation.
 pub fn is_facing_camera(sticker_dir: Vec3, camera: &Camera) -> bool {
     sticker_dir.dot(camera.forward()) > 0.0
-}
-
-/// The two unit axes perpendicular to `direction` (itself axis-aligned), used to find
-/// a sticker's four corners.
-fn perpendicular_axes(direction: Vec3) -> (Vec3, Vec3) {
-    if direction.x != 0.0 {
-        (Vec3::new(0.0, 1.0, 0.0), Vec3::new(0.0, 0.0, 1.0))
-    } else if direction.y != 0.0 {
-        (Vec3::new(1.0, 0.0, 0.0), Vec3::new(0.0, 0.0, 1.0))
-    } else {
-        (Vec3::new(1.0, 0.0, 0.0), Vec3::new(0.0, 1.0, 0.0))
-    }
 }
 
 fn face_corners(center: Vec3, u: Vec3, v: Vec3, half_extent: f64, camera: &Camera) -> [ScreenPoint; 4] {

@@ -1,6 +1,8 @@
 use rubixemulator::piece::Piece;
-use rubixemulator::render::projection::{build_sticker_quads, is_facing_camera, project_point, QuadKind};
-use rubixemulator::render::Camera;
+use rubixemulator::render::terminal::camera::Camera;
+use rubixemulator::render::terminal::projection::{
+    build_sticker_quads, is_facing_camera, project_point, QuadKind,
+};
 use rubixemulator::rubix::Rubix;
 use rubixemulator::shapes::cuboid::Cuboid;
 use rubixemulator::vec3::{direction, Vec3};

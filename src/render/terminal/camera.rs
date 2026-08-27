@@ -12,6 +12,12 @@ pub struct Camera {
     pub zoom: f64,
 }
 
+impl Default for Camera {
+    fn default() -> Self {
+        Camera::new()
+    }
+}
+
 impl Camera {
     /// Classic isometric-ish starting angle.
     pub fn new() -> Self {
