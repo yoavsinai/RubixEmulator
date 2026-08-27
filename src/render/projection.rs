@@ -76,7 +76,7 @@ pub fn is_facing_camera(sticker_dir: Vec3, camera: &Camera) -> bool {
 
 /// The two unit axes perpendicular to `direction` (itself axis-aligned), used to find
 /// a sticker's four corners.
-fn perpendicular_axes(direction: Vec3) -> (Vec3, Vec3) {
+pub fn perpendicular_axes(direction: Vec3) -> (Vec3, Vec3) {
     if direction.x != 0.0 {
         (Vec3::new(0.0, 1.0, 0.0), Vec3::new(0.0, 0.0, 1.0))
     } else if direction.y != 0.0 {
