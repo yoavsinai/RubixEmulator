@@ -18,7 +18,11 @@
                 }
             },
             "args": [],
-            "cwd": "${workspaceFolder}"
+            "cwd": "${workspaceFolder}",
+            // The renderer is an interactive TUI: it needs a real terminal for keyboard
+            // input (raw mode). The default "console" (Debug Console) doesn't deliver
+            // keystrokes, which looks like every key being dead.
+            "terminal": "integrated"
         },
         {
             "type": "lldb",
